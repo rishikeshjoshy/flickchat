@@ -32,12 +32,54 @@ class SettingsPage extends StatelessWidget {
             //Dark Mode
             Text("Dark Mode",),
 
-            //Switch Toggle
-            CupertinoSwitch(
-                value: Provider.of<ThemeProvider>(context , listen: false).isDarkMode,
-                onChanged: (value) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()),
-          ]
+                //Switch Toggle
+                CupertinoSwitch(
+                    value: Provider.of<ThemeProvider>(context , listen: false).isDarkMode,
+                    onChanged: (value) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()
+                ),
+              ]
+          ),
         ),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.secondary,
+              borderRadius: BorderRadius.circular(20)
+            ),
+            margin: EdgeInsets.only(left: 25, right: 25, top: 10),
+            padding: EdgeInsets.only(left: 25, right: 25, top: 25, bottom: 25),
+
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Blocked Icon
+                //Icon(Icons.block_outlined,color: Colors.red,),
+
+                //const SizedBox(width: 5,),
+
+                // Blocked Users
+                Text("Blocked Users",
+                style: TextStyle(
+                  color: Colors.red.shade500,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                // Button --> Navigates to Blocked User Page
+                IconButton(
+                    onPressed: () => Navigator.push(
+                        context, MaterialPageRoute(
+                        builder: (context) => BlockedUsersPage())),
+                    icon: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.red.shade500,
+                    )
+                )
+
+              ],
+            ),
+          )
+        ]
       ),
     );
   }
