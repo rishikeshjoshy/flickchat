@@ -7,6 +7,45 @@ class ChatService { // ChatService class encapsulates messaging-related Firestor
   final FirebaseFirestore _firestore = FirebaseFirestore.instance; // Firestore instance used to read/write collections and documents
   final FirebaseAuth _auth = FirebaseAuth.instance; // FirebaseAuth instance used to get current user info
 
+  // Get a stream of the main chat room document (for the emotion capsule)
+  Stream<DocumentSnapshot> getChatRoomStream(String receiverID) {
+    // Get current user ID
+    final String currentUserID = _auth.currentUser!.uid;
+
+    // Sort the UIDs to build the consistent chat room ID
+    List<String> ids = [currentUserID, receiverID];
+    ids.sort();
+    final String chatRoomID = ids.join('_');
+
+    // Return the stream
+    return _firestore.collection('chat_rooms').doc(chatRoomID).snapshots();
+  }
+
+  // Update the user's emotion label in the chat room document
+  Future<void> updateUserEmotion(String receiverID, String emotionLabel) async {
+    // Get current user ID
+    final String currentUserID = _auth.currentUser!.uid;
+
+    // Get the chat room ID
+    List<String> ids = [currentUserID, receiverID];
+    ids.sort();
+    final String chatRoomID = ids.join('_');
+
+    // Get the document reference
+    final docRef = _firestore.collection('chat_rooms').doc(chatRoomID);
+
+    // Ensure the document exists before updating, or create it
+    await docRef.set(
+      {
+        'emotions': {
+          // Use dot notation to update only the current user's field
+          currentUserID: emotionLabel,
+        }
+      },
+      SetOptions(merge: true), // merge:true prevents overwriting the whole doc
+    );
+  }
+
   // Returns a stream of lists of user maps from the "Users" collection
   Stream<List<Map<String,dynamic>>> getUserStream(){ // Method to stream all user documents as a list of maps
     return _firestore.collection("Users").snapshots().map((snapshot){ // Listen to snapshots on the "Users" collection and map each QuerySnapshot
@@ -57,5 +96,7 @@ class ChatService { // ChatService class encapsulates messaging-related Firestor
         .orderBy("timestamp", descending: false) // Order messages by timestamp ascending (oldest first)
         .snapshots(); // Return real-time snapshots for the query so UI can listen to live updates
   } // End of getMessages
+
+
 
 } // End of ChatService class

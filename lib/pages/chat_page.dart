@@ -1,249 +1,472 @@
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore types and query/timestamp helpers
-import 'package:flutter/material.dart'; // Flutter UI framework
-import 'package:flikchat/componenets/my_textfield.dart'; // Custom text field widget used for message input
+// lib/pages/chat_page.dart (Your existing file, now modified)
 
-import '../services/auth/auth_service.dart'; // AuthService to get current user info
-import '../services/chat/chat_services.dart'; // ChatService to send and receive messages
+import 'dart:async'; // --- NEW --- (For the Timer)
+import 'dart:io'; // --- NEW --- (For File)
+import 'dart:math'; // --- NEW --- (For Random interval)
 
-class ChatPage extends StatefulWidget { // Stateful widget representing a chat screen
-  final String receiverEmail; // Receiver's email to display in the AppBar
-  final String receiverID; // Receiver's UID used to compute the chat room id
+import 'package:camera/camera.dart'; // --- NEW ---
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flikchat/componenets/my_textfield.dart';
+import 'package:permission_handler/permission_handler.dart'; // --- NEW ---
+import 'package:shared_preferences/shared_preferences.dart'; // --- NEW ---
 
-  const ChatPage({ // Constructor for ChatPage
-    super.key, // Pass the key to the StatefulWidget base class
-    required this.receiverEmail, // Require receiverEmail when constructing ChatPage
-    required this.receiverID, // Require receiverID when constructing ChatPage
-  }); // End constructor
+// --- 1. IMPORT CLEANUP ---
+// We only need the barrel file
+import '../services/services.dart';
+// import '../services/ml/ml_service.dart'; // This line was redundant and is REMOVED
 
-  @override // Override annotation for createState
-  State<ChatPage> createState() => _ChatPageState(); // Create the mutable state for this widget
-} // End ChatPage
+import '../services/auth/auth_service.dart';
+import '../services/chat/chat_services.dart';
 
-class _ChatPageState extends State<ChatPage> { // State class for ChatPage
-  final TextEditingController _messageController = TextEditingController(); // Controller for the message input field
-  final ScrollController _scrollController = ScrollController(); // Controller to programmatically scroll the messages list
-  final ChatService _chatService = ChatService(); // Instance of ChatService for DB operations
-  final AuthService _auth_service = AuthService(); // Instance of AuthService to access current user (note: variable name preserved)
+class ChatPage extends StatefulWidget {
+  final String receiverEmail;
+  final String receiverID;
 
-  // Build stream of messages for this chat (ChatService computes chatroom id internally)
-  Stream<QuerySnapshot<Map<String, dynamic>>> _messagesStream() { // Method to get the message stream
-    final senderID = _auth_service.getCurrentUser()!.uid; // Get current user's UID from AuthService
-    return _chatService.getMessages(senderID, widget.receiverID); // Return the Firestore stream for messages between sender and receiver
-  } // End _messagesStream
+  const ChatPage({
+    super.key,
+    required this.receiverEmail,
+    required this.receiverID,
+  });
 
-  // Single message bubble builder
-  Widget _buildMessageItem(DocumentSnapshot<Map<String, dynamic>> doc) { // Method to build a single message UI from a document
-    final data = doc.data() ?? <String, dynamic>{}; // Extract document data as a Map or empty map if null
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
 
-    // IMPORTANT: Use the same key name used when saving the message in ChatService / Message model
-    final text = (data['message'] as String?) ?? ''; // Extract the message text from the document
-    final senderId = (data['senderID'] as String?) ?? ''; // Extract the senderID field from the document (must match stored key)
-    final timestamp = data['timestamp']; // Extract the timestamp field (may be a Timestamp or int)
-    final currentUserId = _auth_service.getCurrentUser()!.uid; // Get the currently signed in user's UID
-    final isMine = senderId == currentUserId; // Determine whether this message was sent by the current user
+class _ChatPageState extends State<ChatPage> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final ChatService _chatService = ChatService();
+  final AuthService _auth_service = AuthService();
 
-    // receiver bubble color (green) and sender bubble color (light grey)
-    final receiverGradient = const LinearGradient( // Gradient for receiver bubble
-      colors: [Color(0xFF66E08A), Color(0xFF2FBF71)], // Gradient color stops for green bubble
-      begin: Alignment.topLeft, // Gradient begin alignment
-      end: Alignment.bottomRight, // Gradient end alignment
-    ); // End receiverGradient
-    final senderColor = const Color(0xFFF1F2F6); // Solid color for sender (current user) bubble
-    final receiverTextColor = Colors.white; // Text color for receiver bubble (contrast on green)
-    final senderTextColor = Colors.black87; // Text color for sender bubble (dark on light grey)
+  // --- NEW --- (All the new state variables for the feature)
+  final MlService _mlService = MlService(); // Instance of our new ML service
+  CameraController? _cameraController; // Controller for the camera
+  Timer? _emotionTimer; // Timer for the random intervals
+  bool _isEmotionFeatureEnabled = false; // User's preference from settings
+  bool _isFeatureReady = false; // Tracks if camera and model are loaded
+  String _otherUserEmotion = ''; // Holds the other user's emotion for the capsule
+  // --- END NEW ---
 
-    final maxBubbleWidth = MediaQuery.of(context).size.width * 0.9; // Limit the bubble width to 74% of screen width
+  // --- NEW ---
+  // We override initState to load all our new features
+  @override
+  void initState() {
+    super.initState();
+    // This function will handle all the async setup
+    _initializeFeatures();
+  }
 
-    // Asymmetric border radii so left and right bubbles look different
-    final borderRadius = BorderRadius.only( // Border radius to create distinct shapes for left/right bubbles
-      topLeft: Radius.circular(isMine ? 18 : 6), // Top-left radius depends on owner
-      topRight: Radius.circular(isMine ? 6 : 18), // Top-right radius depends on owner
-      bottomLeft: const Radius.circular(18), // Bottom-left fixed radius
-      bottomRight: const Radius.circular(18), // Bottom-right fixed radius
-    ); // End borderRadius
+  // --- NEW ---
+  // A clean function to load everything the feature needs
+  Future<void> _initializeFeatures() async {
+    // 1. Load the user's setting from device storage
+    final prefs = await SharedPreferences.getInstance();
+    _isEmotionFeatureEnabled = prefs.getBool('isEmotionFeatureEnabled') ?? false;
 
-    return Padding( // Outer padding around each message bubble
-      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 12.0), // Vertical and horizontal padding
-      child: Row( // Row to align bubble left or right
-        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start, // Align to end if mine, start if receiver
-        crossAxisAlignment: CrossAxisAlignment.end, // Align children to the bottom
-        children: [ // Children of the Row
-          ConstrainedBox( // Constrain the maximum width of the bubble
-            constraints: BoxConstraints(maxWidth: maxBubbleWidth), // Apply max width constraint
-            child: Container( // The bubble container
-              padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0), // Inner padding inside the bubble
-              decoration: BoxDecoration( // Decoration for the bubble
-                // receiver (not mine) gets green gradient; mine gets light grey color
-                gradient: isMine ? null : receiverGradient, // Apply gradient for receiver bubbles
-                color: isMine ? senderColor : const Color(0xFF2FBF71), // Apply solid color for sender or fallback green for receiver
-                borderRadius: borderRadius, // Apply the asymmetric border radius
-                boxShadow: [ // Subtle shadow for elevation
-                  BoxShadow( // Shadow definition
-                    color: Colors.black.withOpacity(isMine ? 0.04 : 0.12), // Shadow opacity varies by owner
-                    blurRadius: isMine ? 4 : 8, // Blur radius varies by owner
-                    offset: const Offset(0, 3), // Shadow offset
-                  ), // End BoxShadow
-                ], // End boxShadow list
-                border: isMine ? Border.all(color: Colors.grey.shade300) : null, // Thin border for sender bubbles
-              ), // End BoxDecoration
-              child: Column( // Column inside bubble for message text and timestamp
-                crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start, // Align text and time appropriately
-                mainAxisSize: MainAxisSize.min, // Shrink column to fit content
-                children: [ // Children of the column
-                  Text( // Message text widget
-                    text, // The message string to display
-                    style: TextStyle( // Text style for message
-                      color: isMine ? senderTextColor : receiverTextColor, // Choose text color based on owner
-                      fontSize: 15, // Font size for message text
-                      height: 1.35, // Line height multiplier for readability
-                    ), // End TextStyle
-                  ), // End Text
-                  const SizedBox(height: 6), // Spacing between message and timestamp
-                  if (timestamp != null) // Only show timestamp when available
-                    Text( // Timestamp text widget
-                      _formatTimestamp(timestamp), // Formatted timestamp string (HH:mm)
-                      style: TextStyle( // Style for timestamp
-                        color: isMine ? Colors.black45 : Colors.white70, // Timestamp color based on owner bubble
-                        fontSize: 10, // Smaller font for timestamp
-                      ), // End TextStyle for timestamp
-                    ), // End timestamp Text
-                ], // End children for Column
-              ), // End Column
-            ), // End Container
-          ), // End ConstrainedBox
-        ], // End Row children
-      ), // End Row
-    ); // End Padding and return widget
-  } // End _buildMessageItem
+    // 2. If the feature is disabled by the user, stop here.
+    if (!_isEmotionFeatureEnabled) {
+      print('Emotion feature is disabled by user.');
+      return;
+    }
 
-  // Format timestamp (accepts Timestamp or milliseconds int)
-  static String _formatTimestamp(dynamic ts) { // Helper to format Firestore Timestamp or milliseconds into HH:mm
-    try { // Attempt to parse ts
-      Timestamp t = ts is Timestamp ? ts : Timestamp.fromMillisecondsSinceEpoch(ts as int); // Convert to Timestamp if needed
-      final dt = t.toDate(); // Convert Timestamp to DateTime
-      final hours = dt.hour.toString().padLeft(2, '0'); // Pad hour with leading zero
-      final minutes = dt.minute.toString().padLeft(2, '0'); // Pad minute with leading zero
-      return '$hours:$minutes'; // Return formatted time string
-    } catch (_) { // If parsing fails
-      return ''; // Return empty string on failure
-    } // End try/catch
-  } // End _formatTimestamp
+    // 3. Load the TFLite Model
+    await _mlService.loadModel();
+    if (!_mlService.isModelLoaded) {
+      print('Failed to load ML model, aborting feature.');
+      return;
+    }
 
-  // Send message via ChatService and scroll to newest
-  Future<void> sendMessage() async { // Method to send the typed message
-    final text = _messageController.text.trim(); // Read and trim the input text
-    if (text.isEmpty) return; // Return early if there is no text to send
+    // 4. Initialize the Camera
+    if (!await _initializeCamera()) {
+      print('Failed to initialize camera, aborting feature.');
+      return;
+    }
 
-    await _chatService.sendMessage(widget.receiverID, text); // Call ChatService to write the message document to Firestore
+    // 5. If everything is loaded, set the ready flag and start the timer
+    setState(() {
+      _isFeatureReady = true;
+    });
+    _startEmotionTimer();
+  }
 
-    _messageController.clear(); // Clear the input field after sending
-    FocusScope.of(context).unfocus(); // Dismiss the keyboard after sending
+  // --- NEW ---
+  // Handles camera permissions and initialization
+  Future<bool> _initializeCamera() async {
+    // Request camera permission
+    final status = await Permission.camera.request();
+    if (status.isDenied || status.isPermanentlyDenied) {
+      print('Camera permission denied');
+      return false;
+    }
 
-    // small delay for stream to update then scroll to bottom (newest)
-    await Future.delayed(const Duration(milliseconds: 120)); // Small delay to let Firestore stream update
-    // if (_scroll_controller_has_clients()) { // Check if the scroll controller is attached to any Scrollable
-    //   // when using reverse: true, scroll to minScrollExtent to show newest
-    //   _scrollController.animateTo( // Animate the list to the bottom (newest) position
-    //     _scrollController.position.minScrollExtent, // Target scroll position when reverse is true
-    //     duration: const Duration(milliseconds: 220), // Duration of animation
-    //     curve: Curves.easeOut, // Animation curve
-    //   ); // End animateTo
-    // } // End if
-  } // End sendMessage
+    try {
+      // Get available cameras and use the front one
+      final cameras = await availableCameras();
+      final frontCamera = cameras.firstWhere(
+            (cam) => cam.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first, // Fallback to any camera
+      );
 
-  // Build the message list with StreamBuilder
-  Widget _buildMessageList() { // Method returning the message list widget
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>( // StreamBuilder to listen to Firestore messages stream
-      stream: _messagesStream(), // Attach the messages stream for this chat
-      builder: (context, snapshot) { // Builder callback with snapshot
-        if (snapshot.hasError) { // If stream produced an error
-          return Center(child: Text('Error ${snapshot.error}')); // Show error text in center
-        } // End if
-        if (snapshot.connectionState == ConnectionState.waiting) { // While waiting for initial data
-          return const Center(child: Text('Loading...')); // Show loading indicator text
-        } // End if
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.low, // Use low res for fast, silent snapshots
+        enableAudio: false,
+      );
 
-        final docs = snapshot.data!.docs; // Get the list of document snapshots from the QuerySnapshot
+      await _cameraController!.initialize();
+      return true;
+    } catch (e) {
+      print('Error initializing camera: $e');
+      return false;
+    }
+  }
 
-        // reverse:true so newest messages appear at the bottom of the visible list
-        return ListView.builder( // Build a performant scrollable list
-          controller: _scrollController, // Attach the scroll controller
-          reverse: false, // Reverse so newest messages show at bottom when scrolled to top
-          padding: const EdgeInsets.symmetric(vertical: 12), // Padding around list
-          itemCount: docs.length, // Number of items to build
-          itemBuilder: (context, index) { // Item builder callback
-            final doc = docs[index]; // Get document at this index
-            return _buildMessageItem(doc); // Build and return message bubble widget for this document
-          }, // End itemBuilder
-        ); // End ListView.builder
-      }, // End builder
-    ); // End StreamBuilder return
-  } // End _buildMessageList
+  // --- NEW ---
+  // Starts the random interval timer
+  void _startEmotionTimer() {
+    // Stop any existing timer
+    _emotionTimer?.cancel();
 
-  // Input row with send button
-  Widget _buildUserInput() { // Method to build the input row with text field and send button
-    return SafeArea( // SafeArea to avoid system intrusions like notches and nav bars
-      child: Container( // Container wrapping the input controls
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12), // Inner padding for the input area
-        color: Theme.of(context).colorScheme.surface,// Background color for the input area
+    // Start a new periodic timer
+    _emotionTimer = Timer.periodic(
+      // --- DURATION ---
+      // This creates a random interval between 30 and 60 seconds.
+      // You can change these numbers.
+      Duration(seconds: 30 + Random().nextInt(31)),
+          (timer) {
+        // This function will be called at every interval
+        _captureAndAnalyze();
+      },
+    );
+  }
 
-        child: Row( // Row containing the text field and send button
-          children: [ // Children of the Row
-            Expanded(// Expanded to let the text field take available horizontal space
-              child: MyTextfield(// Custom text field widget for message input
-                hintText: "Message", // Placeholder text
-                ObscureText: false, // Not obscuring input for chat
-                controller: _messageController, // Attach controller to read/write the text
-              ), // End MyTextfield
-            ), // End Expanded
-            const SizedBox(width: 8), // Horizontal gap between text field and button
-            ElevatedButton( // Send button
-              onPressed: sendMessage, // Call sendMessage when pressed
-              style: ElevatedButton.styleFrom( // Styling for the button
-                shape: RoundedRectangleBorder( // Rounded rectangle shape
-                  borderRadius: BorderRadius.circular(10), // Corner radius for the button
-                ), // End shape
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), // Inner padding for the button
-                backgroundColor: const Color(0xFF2FBF71), // Button background color (green)
-                elevation: 3, // Elevation for shadow
-                shadowColor: const Color(0xFF2FBF71).withOpacity(0.25), // Button shadow color with opacity
-              ), // End styleFrom
-              child: const Text( // Button label
-                'Send', // Label text
-                style: TextStyle(fontSize: 14, color: Colors.white), // Label text style
-              ), // End Text
-            ), // End ElevatedButton
-          ], // End Row children
-        ), // End Row
-      ), // End Container
-    ); // End SafeArea
-  } // End _buildUserInput
+  // --- NEW ---
+  // This is the core function that runs at each interval
+  Future<void> _captureAndAnalyze() async {
+    // Guard clause: Don't run if feature is disabled or not ready
+    if (!_isFeatureReady || _cameraController == null) {
+      return;
+    }
 
-  @override // Override annotation for dispose
-  void dispose() { // Dispose lifecycle method
-    _messageController.dispose(); // Dispose message controller to free resources
-    _scrollController.dispose(); // Dispose scroll controller to free resources
-    super.dispose(); // Call superclass dispose
-  } // End dispose
+    try {
+      // 1. Take the snapshot
+      final snapshot = await _cameraController!.takePicture();
 
-  @override // Override annotation for build
-  Widget build(BuildContext context) { // Build method for the widget tree
-    return Scaffold( // Scaffold provides basic visual layout structure
-      appBar: AppBar( // Top app bar for the chat screen
-        title: Text(widget.receiverEmail,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.primary
-        ),), // Show receiver's email as the title
-        backgroundColor: Theme.of(context).colorScheme.surface, // AppBar background color
-        foregroundColor: Colors.black87, // AppBar text/icon color
-        elevation: 1, // Slight elevation for app bar shadow
-      ), // End AppBar
-      body: Column( // Column layout to place messages list above input row
-        children: [ // Children of the Column
-          Expanded(child: _buildMessageList()), // Expanded widget for message list to take remaining space
-          _buildUserInput(), // Input row for composing messages
-        ], // End children
-      ), // End Column
-    ); // End Scaffold
-  } // End build
-} // End _ChatPageState
+      // 2. Run inference
+      final emotionLabel = await _mlService.runInference(snapshot.path);
+
+      // 3. Delete the snapshot file (for privacy)
+      try {
+        File(snapshot.path).delete();
+      } catch (e) {
+        if (kDebugMode) {
+          print('Failed to delete snapshot: $e');
+        }
+      }
+
+      // 4. If we got a result, send it to Firestore
+      if (emotionLabel != null) {
+        print('Analyzed emotion: $emotionLabel');
+        await _chatService.updateUserEmotion(widget.receiverID, emotionLabel);
+      }
+    } catch (e) {
+      print('Error during capture & analysis: $e');
+    }
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  Stream<QuerySnapshot<Map<String, dynamic>>> _messagesStream() {
+    final senderID = _auth_service.getCurrentUser()!.uid;
+    return _chatService.getMessages(senderID, widget.receiverID);
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  Widget _buildMessageItem(DocumentSnapshot<Map<String, dynamic>> doc) {
+    // ... (Your existing message bubble code is perfect, no changes needed)
+    final data = doc.data() ?? <String, dynamic>{};
+    final text = (data['message'] as String?) ?? '';
+    final senderId = (data['senderID'] as String?) ?? '';
+    final timestamp = data['timestamp'];
+    final currentUserId = _auth_service.getCurrentUser()!.uid;
+    final isMine = senderId == currentUserId;
+    final receiverGradient = const LinearGradient(
+      colors: [Color(0xFF66E08A), Color(0xFF2FBF71)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+    final senderColor = const Color(0xFFF1F2F6);
+    final receiverTextColor = Colors.white;
+    final senderTextColor = Colors.black87;
+    final maxBubbleWidth = MediaQuery.of(context).size.width * 0.9;
+    final borderRadius = BorderRadius.only(
+      topLeft: Radius.circular(isMine ? 18 : 6),
+      topRight: Radius.circular(isMine ? 6 : 18),
+      bottomLeft: const Radius.circular(18),
+      bottomRight: const Radius.circular(18),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 12.0),
+      child: Row(
+        mainAxisAlignment:
+        isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+            child: Container(
+              padding:
+              const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0),
+              decoration: BoxDecoration(
+                gradient: isMine ? null : receiverGradient,
+                color: isMine ? senderColor : const Color(0xFF2FBF71),
+                borderRadius: borderRadius,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isMine ? 0.04 : 0.12),
+                    blurRadius: isMine ? 4 : 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                border:
+                isMine ? Border.all(color: Colors.grey.shade300) : null,
+              ),
+              child: Column(
+                crossAxisAlignment:
+                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: isMine ? senderTextColor : receiverTextColor,
+                      fontSize: 15,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (timestamp != null)
+                    Text(
+                      _formatTimestamp(timestamp),
+                      style: TextStyle(
+                        color: isMine ? Colors.black45 : Colors.white70,
+                        fontSize: 10,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  static String _formatTimestamp(dynamic ts) {
+    try {
+      Timestamp t =
+      ts is Timestamp ? ts : Timestamp.fromMillisecondsSinceEpoch(ts as int);
+      final dt = t.toDate();
+      final hours = dt.hour.toString().padLeft(2, '0');
+      final minutes = dt.minute.toString().padLeft(2, '0');
+      return '$hours:$minutes';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  Future<void> sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    await _chatService.sendMessage(widget.receiverID, text);
+
+    _messageController.clear();
+    FocusScope.of(context).unfocus();
+
+    await Future.delayed(const Duration(milliseconds: 120));
+    // ... (Your scroll logic was commented out, I left it that way)
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  Widget _buildMessageList() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _messagesStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error ${snapshot.error}'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Text('Loading...'));
+        }
+        final docs = snapshot.data!.docs;
+        return ListView.builder(
+          controller: _scrollController,
+          reverse: false,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
+            return _buildMessageItem(doc);
+          },
+        );
+      },
+    );
+  }
+
+  // --- MODIFIED --- (This function is from your code, unchanged)
+  Widget _buildUserInput() {
+    // ... (Your existing user input code is perfect, no changes needed)
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        color: Theme.of(context).colorScheme.surface,
+        child: Row(
+          children: [
+            Expanded(
+              child: MyTextfield(
+                hintText: "Message",
+                ObscureText: false,
+                controller: _messageController,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: sendMessage,
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                backgroundColor: const Color(0xFF2FBF71),
+                elevation: 3,
+                shadowColor: const Color(0xFF2FBF71).withOpacity(0.25),
+              ),
+              child: const Text(
+                'Send',
+                style: TextStyle(fontSize: 14, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- 3. MODIFIED _buildEmotionCapsule ---
+  // --- MODIFIED _buildEmotionCapsule with Debugging ---
+  Widget _buildEmotionCapsule() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _chatService.getChatRoomStream(widget.receiverID),
+      builder: (context, snapshot) {
+
+        // --- 1. Is the StreamBuilder connecting? ---
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          print("CAPSULE: Stream is waiting...");
+          return const SizedBox.shrink(); // Show nothing while loading
+        }
+
+        // --- 2. Did we get an error? ---
+        if (snapshot.hasError) {
+          print("CAPSULE ERROR: ${snapshot.error}");
+          return const SizedBox.shrink();
+        }
+
+        // --- 3. Is the document empty? ---
+        if (!snapshot.hasData || !snapshot.data!.exists || snapshot.data!.data() == null) {
+          print("CAPSULE: No data or document doesn't exist. This is normal if it's a new chat.");
+          return const SizedBox.shrink();
+        }
+
+        // --- 4. OK, we have a document. Let's check its contents. ---
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final emotions = data['emotions'] as Map<String, dynamic>?;
+
+        if (emotions == null) {
+          print("CAPSULE: Got document, but the 'emotions' map is missing.");
+          return const SizedBox.shrink();
+        }
+
+        // --- 5. We have the 'emotions' map. Let's check for the receiver's key. ---
+        // This is the most important part.
+        final otherUserEmotion = emotions[widget.receiverID] as String?;
+
+        if (otherUserEmotion == null || otherUserEmotion.isEmpty) {
+          print("CAPSULE: Found 'emotions' map, but the key for receiver (${widget.receiverID}) is missing or empty.");
+          return const SizedBox.shrink();
+        }
+
+        // --- 6. SUCCESS! ---
+        print("CAPSULE: Success! Found emotion '$otherUserEmotion' for receiver ${widget.receiverID}.");
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+          child: Align(
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                otherUserEmotion,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    // --- NEW --- (Dispose all our new controllers)
+    _emotionTimer?.cancel();
+    _cameraController?.dispose();
+    _mlService.dispose();
+    // --- END NEW ---
+
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // --- 2. MODIFIED AppBar ---
+        // The Row and capsule are removed, restoring the simple title.
+        title: Text(
+          widget.receiverEmail,
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.primary, fontSize: 17),
+        ),
+        // --- END MODIFIED AppBar ---
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Colors.black87,
+        elevation: 1,
+      ),
+      body: Column(
+        children: [
+          // --- 2. MOVED CAPSULE HERE ---
+          // The capsule is now the first item in the body's Column
+          _buildEmotionCapsule(),
+
+          Expanded(child: _buildMessageList()),
+          _buildUserInput(),
+        ],
+      ),
+    );
+  }
+}

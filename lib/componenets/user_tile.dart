@@ -28,18 +28,18 @@ class UserTile extends StatelessWidget {
           child: Row(
             children: [
 
-              const SizedBox(width: 20,),
+              const SizedBox(width: 5,),
 
               // Icon
               Icon(Icons.person,
-              size: 25,),
+              size: 20,),
 
-              const SizedBox(width: 20,),
+              const SizedBox(width: 10,),
 
               // Username
               Text(text,
               style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w200
                 ),
               ),
