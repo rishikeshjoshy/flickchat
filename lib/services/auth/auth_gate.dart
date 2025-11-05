@@ -5,7 +5,7 @@ import '../../pages/home_page.dart';
 import 'login_or_register.dart';
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  const AuthGate({super.key,});
 
   @override
   Widget build(BuildContext context) {

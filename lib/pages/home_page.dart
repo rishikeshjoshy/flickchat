@@ -58,7 +58,7 @@ class HomePage extends StatelessWidget {
         );
 
       },
-      stream: _chatService.getUserStream(),
+      stream: _chatService.getUsersStreamExcludingBlocked(),
     );
   }
 
@@ -84,11 +84,7 @@ class HomePage extends StatelessWidget {
       );
     } else {
       return Container(
-
       );
     }
-
-
   }
-
 }

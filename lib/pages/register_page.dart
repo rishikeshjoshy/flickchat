@@ -11,6 +11,8 @@ class RegisterPage extends StatelessWidget {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _confirmpwController = TextEditingController();
+  final FocusNode myFocusNode = FocusNode();
+
 
   // toggle function for onTap
   final void Function() onTap;
@@ -80,7 +82,8 @@ class RegisterPage extends StatelessWidget {
             MyTextfield(
                 hintText: "Email",
                 ObscureText: false,
-                controller: _emailController
+                controller: _emailController,
+                focusNode: myFocusNode,
             ),
 
             const SizedBox(height: 10,),
@@ -88,7 +91,8 @@ class RegisterPage extends StatelessWidget {
             MyTextfield(
                 hintText: "Password",
                 ObscureText: true,
-                controller: _pwController
+                controller: _pwController,
+                focusNode: myFocusNode,
             ),
 
             const SizedBox(height: 10,),
@@ -96,7 +100,9 @@ class RegisterPage extends StatelessWidget {
             MyTextfield(
                 hintText: "Confirm Password",
                 ObscureText: true,
-                controller: _confirmpwController),
+                controller: _confirmpwController,
+                focusNode: myFocusNode,
+            ),
 
             const SizedBox(height: 10,),
             // Requirement Text

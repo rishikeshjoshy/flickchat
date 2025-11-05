@@ -11,6 +11,7 @@ class LoginPage extends StatelessWidget {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _confirmpwController = TextEditingController();
+  final FocusNode myFocusNode = FocusNode();
 
   // Toggle button onTap
   final void Function()? onTap;
@@ -67,6 +68,7 @@ class LoginPage extends StatelessWidget {
               hintText:"Email",
               ObscureText: false,
               controller: _emailController,
+              focusNode: myFocusNode,
 
             ),
 
@@ -76,6 +78,7 @@ class LoginPage extends StatelessWidget {
                 hintText:"Password",
                 ObscureText: true,
                 controller: _pwController,
+                focusNode: myFocusNode,
             ),
 
             const SizedBox(height: 20,),
