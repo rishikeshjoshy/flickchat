@@ -18,19 +18,23 @@ class SettingsPage extends StatelessWidget {
           fontWeight: FontWeight.bold,
         ),),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.secondary,
+      body:
+      // Theme Switch Button
+      Column(
+        children: [
+          Container(
+          decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.secondary,
               borderRadius: BorderRadius.circular(20)
-        ),
-        margin: EdgeInsets.all(25),
-        padding:  EdgeInsets.all(25),
+          ),
+          margin: EdgeInsets.all(25),
+          padding:  EdgeInsets.all(25),
 
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children:[
-            //Dark Mode
-            Text("Dark Mode",),
+          child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children:[
+                //Dark Mode
+                Text("Dark Mode",style: TextStyle(fontWeight: FontWeight.bold,fontSize: 18),),
 
                 //Switch Toggle
                 CupertinoSwitch(
@@ -81,6 +85,8 @@ class SettingsPage extends StatelessWidget {
           )
         ]
       ),
+
+
     );
   }
 }
