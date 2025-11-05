@@ -41,46 +41,46 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAZZyPZR6-3_YPvfk0ZDKMT-55wTB7dqHg',
-    appId: '1:446761754287:web:123d456d6a9cee1d567e5a',
+    apiKey: 'AIzaSyA*****************dqHg',
+    appId: '1:4467617******************567e5a',
     messagingSenderId: '446761754287',
-    projectId: 'flickchat-c2d04',
-    authDomain: 'flickchat-c2d04.firebaseapp.com',
-    storageBucket: 'flickchat-c2d04.firebasestorage.app',
+    projectId: 'flic***********4',
+    authDomain: 'flic***************om',
+    storageBucket: 'flickc************app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDjbA4kSWrX2NXl03eR-_g04Ycy4kuQ9Ro',
-    appId: '1:446761754287:android:f987148ccc6d9d35567e5a',
+    apiKey: 'AIzaSyA*****************dqHgo',
+    appId: '1:446761*****************6d9d35567e5a',
     messagingSenderId: '446761754287',
-    projectId: 'flickchat-c2d04',
-    storageBucket: 'flickchat-c2d04.firebasestorage.app',
+    projectId: 'flic*****************04',
+    storageBucket: 'flickc*****************ge.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCxYrNx73Goxz0y7VOphyT8bRjJ2-5--rw',
-    appId: '1:446761754287:ios:b6b91f7223610c55567e5a',
+    apiKey: 'AIzaSy*****************RjJ2-5--rw',
+    appId: '1:4467617*****************10c55567e5a',
     messagingSenderId: '446761754287',
-    projectId: 'flickchat-c2d04',
-    storageBucket: 'flickchat-c2d04.firebasestorage.app',
-    iosBundleId: 'com.example.flikchat',
+    projectId: 'flic*****************04',
+    storageBucket: 'flick*****************ge.app',
+    iosBundleId: 'com.e*****************ikchat',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCxYrNx73Goxz0y7VOphyT8bRjJ2-5--rw',
-    appId: '1:446761754287:ios:b6b91f7223610c55567e5a',
+    apiKey: 'AIzaSyCx*****************2-5--rw',
+    appId: '1:44676*****************0c*****************e5a',
     messagingSenderId: '446761754287',
-    projectId: 'flickchat-c2d04',
-    storageBucket: 'flickchat-c2d04.firebasestorage.app',
-    iosBundleId: 'com.example.flikchat',
+    projectId: 'flickc*****************4',
+    storageBucket: 'flick*****************storage.app',
+    iosBundleId: 'com.e*****************hat',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAZZyPZR6-3_YPvfk0ZDKMT-55wTB7dqHg',
-    appId: '1:446761754287:web:5b7a187a3d8173b7567e5a',
+    apiKey: 'AIzaS*****************B7*****************g',
+    appId: '1:446*****************e5a',
     messagingSenderId: '446761754287',
-    projectId: 'flickchat-c2d04',
-    authDomain: 'flickchat-c2d04.firebaseapp.com',
-    storageBucket: 'flickchat-c2d04.firebasestorage.app',
+    projectId: 'fl*****************04',
+    authDomain: 'fli*****************om',
+    storageBucket: 'flickcha*****************p',
   );
 }
